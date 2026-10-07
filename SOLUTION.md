@@ -2,7 +2,9 @@
 
 ## Scope and run instructions
 
-A compact Rails/PostgreSQL take-home using provided mock vendor data. README.md explains setup, demo credentials, scenarios and tests. The implementation was developed with AI assistance, then inspected and tested in the candidate's local environment.
+A compact Rails/PostgreSQL application using the supplied mock vendor data. [README.md](README.md) contains setup commands, seed instructions, demo users, scenarios, and test commands. Start the server with `bundle exec rails server`; the dashboard is at `http://localhost:3000/` and the backend demo is at `http://localhost:3000/demo.html`.
+
+The scope prioritizes account isolation, a defensible consensus policy, atomic credit accounting, preserved verification evidence, and a working browser-to-backend flow. Real vendor APIs, payments, reviewer workflows, and production deployment are outside this implementation.
 
 ## Model
 
@@ -28,9 +30,9 @@ Certificate/ledger has_one run associations do not yet have database-level uniqu
 
 Only returned results are scored. Handle unavailable results first; they force at least REVIEW unless another confirmed condition requires REJECT.
 
-Hard stops: confirmed litigator, DNC/internal DNC, returned invalid/mismatched consent, Anura bad, Tor, exact duplicate, synthetic/reused voice.
+Hard stops: confirmed litigator, DNC/internal DNC, returned invalid/mismatched consent, Anura bad, Tor, exact duplicate, synthetic/reused voice. These are explicit product-policy choices: confirmed restrictions, invalid evidence, clear fraud, and exact duplication should not be cancelled out by unrelated positive checks. Disagreement and uncertain signals receive points instead.
 
-Weighted signals: VPN/proxy/datacenter/IP mismatch +2; Anura suspect +2; phone disagreement +1 or +3; email signals +1 to +3; enrichment disagreement +1 to +3; possible duplicate +1; suspected litigator +2; closed callback window +1.
+Weighted signals: VPN/proxy/datacenter/high-risk/IP mismatch +2; Anura suspect +2; phone disagreement +1 or +3; email signals +1 to +3; enrichment disagreement +1 to +3; possible duplicate +1; suspected litigator +2; closed callback window +1. Multiple VPN-related flags contribute one combined +2, rather than repeatedly scoring the same traffic concern.
 
 Decision order: hard stop or 6+ points REJECT; otherwise 2+ points, any unavailable enabled check, or no returned TrustedForm result REVIEW; otherwise 0–1 points ACCEPT. An exact duplicate can reject with zero points.
 
@@ -62,9 +64,9 @@ One background coordinator evaluates layers sequentially. Polling every 500 ms d
 
 ## Certificates
 
-Version 2 snapshots capture session/browser interactions alongside tenant/pixel, page, visit/submit IPs, submitted fields, mock TrustedForm reference, all layer evidence, verdict and issue time. Browser timestamps are labelled browser_reported. Exact consent-text/version capture is not implemented.
+Version 2 snapshots capture session/browser interactions alongside tenant/pixel, page, visit/submit IPs, submitted fields, mock TrustedForm reference when a matching fixture exists, all layer evidence, verdict and issue time. Browser timestamps are labelled browser_reported. Exact consent-text/version capture is not implemented. Unmatched contacts may have no TrustedForm reference and are not accepted without a returned consent check.
 
-SHA-256 hashes recursively key-sorted JSON. Model callbacks block update/delete; they do not stop raw SQL. Digest checks detect evidence changes when the digest is not also changed. A database attacker can rewrite both; this is not a signature or WORM storage. Older version-1 certificates stay unchanged and verifiable.
+SHA-256 hashes recursively key-sorted JSON. Model callbacks block update/delete; they do not stop raw SQL. Digest checks detect evidence changes when the digest is not also changed. A database attacker can rewrite both; this is not a signature or WORM storage. Older version-1 certificates stay unchanged and verifiable. A successful integrity check does not establish legal consent or imply an ACCEPT verdict.
 
 ## Answers to design questions
 
@@ -85,6 +87,6 @@ SHA-256 hashes recursively key-sorted JSON. Model callbacks block update/delete;
 
 ## Validation and limitations
 
-The candidate supplied passing output for 29 tests/111 assertions before the final review. Browser evidence showed ACCEPT, saved certificate/digest/17-credit debit, CRM inspection and later exact-duplicate REJECT. This package adds 14 tests whose final WSL execution is pending.
+Local verification passed with **43 tests, 181 assertions, zero failures, zero errors, and zero skips**. The Rails eager-loading check passed. Browser checks confirmed an ACCEPT result with a saved certificate, valid digest, and a single 17-credit debit; later checks confirmed exact-duplicate REJECT and unmatched-contact REVIEW with a valid certificate. These results cover the tested paths rather than proving all possible inputs or production failure modes.
 
 Other limits: loose provider payload validation; no token expiry; 50-row CRM cap; code-based policy; static burn estimates; seed balances/passwords reset by reseeding; app-level certificate immutability without signatures/retention enforcement; browser/public-pixel spoofing; no automatic stuck-run/refund recovery. Mock fixtures replace vendor contracts. The local helper only adapts imported consent evidence to localhost.
