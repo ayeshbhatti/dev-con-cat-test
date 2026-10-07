@@ -1,12 +1,14 @@
-# Super Pixel — Rails take-home
+# Super Pixel
 
-Rails/PostgreSQL lead capture with tenant login, mock fraud/consent checks, explained verdicts, certificates, credits, a searchable CRM, and a backend-connected polling demo.
+A Ruby on Rails and PostgreSQL application for capturing leads, running mock fraud and consent checks, and producing an explained verdict and an evidence certificate. It includes account isolation, role-based access, verification credits, a searchable lead dashboard, and a landing page connected to the backend through polling.
+
+The supplied assignment and mock datasets are retained. The original starter README is preserved in [docs/STARTER_README.md](docs/STARTER_README.md).
 
 ## First-time setup
 
-Use Ruby 3.3.1 (Gemfile.lock), Bundler, PostgreSQL, and a role allowed to create databases.
+Tested with Ruby 3.3.1 and Rails 7.1.6. Install Bundler and PostgreSQL, and use a PostgreSQL role with permission to create databases. Run the commands below from the repository root.
 
-For Ubuntu/WSL with an existing role matching your Linux username:
+For Ubuntu/WSL with an existing PostgreSQL role matching your Linux username:
 
 ~~~bash
 sudo service postgresql start
@@ -20,11 +22,9 @@ SEED_PASSWORD='choose-a-local-demo-password' bundle exec rails db:seed
 bundle exec rails server
 ~~~
 
-Replace the sample password. TCP/password users should instead configure PGHOST, PGUSER and PGPASSWORD for their existing role. Every new terminal needs its connection settings.
+Replace `choose-a-local-demo-password` with a local password. If your PostgreSQL role has a different name, set `PGUSER` accordingly. For a TCP connection, configure `PGHOST`, `PGUSER`, and `PGPASSWORD` for that role instead. Apply the connection settings in each terminal that runs database commands.
 
-Seed once when initializing demo data. Reseeding resets fixture account balances and user passwords; it is not ledger reconciliation. Historical seed runs do not debit credits: balances are imported snapshots. Without SEED_PASSWORD, seeding prints a random password shared by demo users.
-
-Existing installations applying the final review patch need no migration or reseed.
+Seed once to initialize the demo. Without `SEED_PASSWORD`, seeding prints a generated password shared by the demo users. Reseeding resets the imported account balances and user passwords; it does not reconcile the credit ledger. Seeded historical runs do not debit credits because the supplied balances are imported snapshots.
 
 ## Application
 
@@ -36,13 +36,19 @@ Existing installations applying the final review patch need no migration or rese
 | Lead details | Click a lead ID |
 | Certificate verification | Follow a lead's certificate link |
 
-Users: admin@catchingconsent.example (super admin), dana@solarpro.example (account admin), luis@solarpro.example (member). Use the password chosen/printed at seeding.
+Demo users share the password chosen or printed during seeding:
 
-Search covers name, email, phone and lead ID. Verdict filters use the latest run. Super admins can filter accounts; members/account admins stay within their account. Results cap at 50 without pagination.
+| Email | Role |
+| --- | --- |
+| `admin@catchingconsent.example` | Super admin |
+| `dana@solarpro.example` | Account admin |
+| `luis@solarpro.example` | Member |
+
+Search covers name, email, phone, and lead ID. Verdict filters use the latest verification run. Super admins can filter accounts; members and account admins see only their own account. Results are capped at 50 without pagination.
 
 ## Demo scenarios
 
-Use localhost rather than opening the HTML as a file. The served page uses pixel px_9f2a01.
+Open [http://localhost:3000/demo.html](http://localhost:3000/demo.html) through the running Rails server. The page uses pixel `px_9f2a01` and the real Rails API. Field interactions are recorded, and verification activity is fetched from persisted backend events.
 
 To align Maria's imported consent fixture with the local page:
 
@@ -50,13 +56,16 @@ To align Maria's imported consent fixture with the local page:
 bundle exec rails runner script/setup_local_demo.rb
 ~~~
 
-This development-only helper changes the imported TrustedForm database record for L-1001, leaving the supplied JSON and issued certificates unchanged. It does not disable page matching or override consensus.
+This development-only helper adapts the imported TrustedForm database record for `L-1001` to `http://localhost:3000/demo.html`. It leaves the supplied JSON files and existing certificates unchanged. Page matching and consensus rules still apply.
 
-Submit Maria Gonzalez, maria.gonzalez@gmail.com, +13105550142 with consent. Maria already exists in the seeded account, so the current detector should show exact duplicate / REJECT. TrustedForm should pass after the helper. Seed/earlier ACCEPT certificates retain their original evidence.
+Useful checks:
 
-An unused email/phone pair such as new-demo@example.test and +15555550199 produces explicit unavailable provider results and REVIEW. No mocked pass is invented for unmatched input. Missing consent returns consent_required without creating a lead or charging credits.
+- **Known contact:** submit Maria Gonzalez, `maria.gonzalez@gmail.com`, and `+13105550142` with consent. The contact matches provider fixtures. After the helper, TrustedForm should pass, but Maria already exists in the seeded account, so duplicate detection produces an exact match and the final verdict is `REJECT`.
+- **Unmatched contact:** use an unused pair such as `new-demo@example.test` and `+15555550199`. Enabled provider checks without matching fixtures are explicitly unavailable, so the verdict is `REVIEW` unless another rejection condition applies. Repeating the pair can produce an exact-duplicate rejection.
+- **Missing consent:** the API returns `consent_required` without creating a lead or charging credits. The demo form also requires its consent checkbox.
+- **Certificate:** open the saved lead in the dashboard and follow its verification link. `valid: true` means the stored evidence matches its digest; it does not mean the lead was accepted or consent was independently proven.
 
-Refresh before each new demo lead: a capture session may create only one lead.
+Refresh before each new demo submission: a capture session can create only one lead. Existing certificates preserve the evidence and verdict from their original run.
 
 ## Tests and verification
 
@@ -67,10 +76,12 @@ bundle exec rails test
 bundle exec rails zeitwerk:check
 ~~~
 
-The candidate confirmed the uploaded snapshot at 29 tests, 111 assertions, zero failures/errors. The final review adds 14 tests for API/role boundaries, replay, visit preservation, atomic result/event writes, capture snapshots and public certificate privacy. Final tests must run locally: the review workspace had no Ruby/PostgreSQL runtime.
+Verified locally: **43 tests, 181 assertions, zero failures, zero errors, and zero skips**. The Rails eager-loading check also passed. Tests cover consensus, credits, account isolation, search, duplicate detection, role/API boundaries, repeated submissions and job delivery, capture evidence, atomic layer/event writes, and certificate integrity and public-field privacy.
 
-Real components: Rails routes/sessions, PostgreSQL, jobs, verdict calculation, certificates/digests, credit transactions, search, and polling. Mock components: vendor responses, initial CRM records, plans and burn estimates.
+## Implementation boundaries
 
-The example retains a simulation fallback without a configured endpoint. The served /demo.html explicitly uses the Rails endpoint. Activity tokens are lead-specific and stored as digests but currently do not expire. The async queue is in-process and not durable.
+Rails routes and sessions, database persistence, background jobs, consensus calculation, certificates and digests, credit transactions, search, and polling are implemented. Vendor responses, initial buyer CRM records, plan data, and burn estimates come from the supplied mock datasets; no real vendor or billing API is called.
 
-See SOLUTION.md for policy, design answers and limitations.
+The standalone example retains a simulation fallback when no endpoint is configured. The served `/demo.html` explicitly uses the Rails endpoint. Activity tokens are specific to a lead and stored as digests, but do not currently expire. The background queue runs in-process and is not durable.
+
+See [SOLUTION.md](SOLUTION.md) for architectural decisions, answers to the design questions, and known limitations. The first production improvements would be a durable queue with reconciliation, stricter provider validation, and stronger certificate protection.
