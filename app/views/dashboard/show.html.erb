@@ -1,0 +1,66 @@
+<% if current_user.super_admin? %>
+  <h1>Platform overview</h1>
+  <p>Cross-account view for platform operators.</p>
+  <section class="grid">
+    <% @accounts.each do |account| %>
+      <article class="panel <%= account.super_admin_warning? ? 'warning' : '' %>">
+        <h2><%= account.name %></h2><p><%= account.plan.titleize %> · <%= account.status.titleize %></p>
+        <p><strong><%= number_with_delimiter(account.credits_remaining) %></strong> credits remaining</p>
+        <p>Burn: <%= number_with_delimiter(account.avg_daily_burn) %>/day · <% if account.avg_daily_burn.positive? %><%= (account.credits_remaining.to_f / account.avg_daily_burn).round(1) %> days left<% else %>n/a<% end %></p>
+        <% if account.super_admin_warning? %><strong class="warn-text">Needs attention</strong><% end %>
+        <p><%= link_to "Manage pixels", admin_pixels_path(account_id: account.id) %></p>
+      </article>
+    <% end %>
+  </section>
+<% else %>
+  <h1><%= @account.name %></h1>
+  <p><%= @account.plan.titleize %> plan · <%= number_with_delimiter(@account.credits_remaining) %> verification credits remaining</p>
+  <p><%= link_to "Manage pixels", admin_pixels_path %></p>
+<% end %>
+
+<section class="panel">
+    <h2>Find leads</h2>
+  <%= form_with url: root_path, method: :get, local: true do |form| %>
+    <div class="grid">
+      <div>
+        <%= form.label :q, "Search leads" %>
+        <%= form.search_field :q, value: @search,
+              placeholder: "Name, email, phone, or lead ID" %>
+      </div>
+      <div>
+        <%= form.label :verdict, "Latest verdict" %>
+        <%= form.select :verdict,
+              options_for_select(
+                [["All verdicts", ""], ["ACCEPT", "ACCEPT"],
+                 ["REVIEW", "REVIEW"], ["REJECT", "REJECT"]],
+                @verdict
+              ) %>
+      </div>
+      <% if current_user.super_admin? %>
+        <div>
+          <%= form.label :account_id, "Account" %>
+          <%= form.select :account_id,
+                options_for_select(
+                  [["All accounts", ""]] +
+                    @accounts.map { |account| [account.name, account.id.to_s] },
+                  @selected_account
+                ) %>
+        </div>
+      <% end %>
+    </div>
+    <p>
+      <%= form.submit "Search" %>
+      <%= link_to "Clear filters", root_path %>
+    </p>
+  <% end %>
+
+<div class="section-heading"><h2>Leads</h2><span><%= @recent_leads.size %> shown of <%= @result_count %> matches</span></div>
+  <div class="table-wrap"><table><thead><tr><th>Lead</th><% if current_user.super_admin? %><th>Account</th><% end %><th>Contact</th><th>Verdict</th><th>Reason / certificate</th></tr></thead><tbody>
+  <% @recent_leads.each do |lead| %><% run = lead.current_run %><tr>
+    <td><code><%= link_to lead.external_id, lead_path(lead) %></code></td><% if current_user.super_admin? %><td><%= lead.account.name %></td><% end %>
+    <td><%= lead.fields["first_name"] %> <%= lead.fields["last_name"] %><br><small><%= lead.fields["email"] %></small></td>
+    <td><span class="pill <%= (run&.verdict || 'queued').downcase %>"><%= run&.verdict || "QUEUED" %></span></td>
+    <td><%= run&.reasons&.first %><br><% if (certificate = run&.consent_certificate) %><small><%= link_to "Verify certificate", "/certificates/#{certificate.certificate_id}/verify", target: "_blank" %></small><% end %></td>
+  </tr><% end %>
+  </tbody></table></div>
+</section>

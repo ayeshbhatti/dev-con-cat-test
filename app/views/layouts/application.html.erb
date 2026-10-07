@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Super Pixel</title>
+    <%= csrf_meta_tags %>
+    <link rel="stylesheet" href="/application.css">
+  </head>
+  <body>
+    <nav><a href="/">Super Pixel</a><% if current_user %><span><%= current_user.name %></span><%= button_to "Sign out", "/logout", method: :delete, class: "link-button" %><% end %></nav>
+    <main>
+      <% flash.each do |kind, message| %><p class="flash <%= kind %>"><%= message %></p><% end %>
+      <%= yield %>
+    </main>
+  </body>
+</html>

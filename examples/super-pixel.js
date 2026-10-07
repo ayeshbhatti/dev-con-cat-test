@@ -73,13 +73,8 @@
   }
 
   function sessionId() {
-    // NOTE: Math.random is fine for a demo id; use a real UUID server-side.
-    return (
-      "sess_" +
-      Date.now().toString(36) +
-      "_" +
-      Math.random().toString(36).slice(2, 8)
-    );
+    if (window.crypto && window.crypto.randomUUID) return "sess_" + window.crypto.randomUUID();
+    return "sess_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 12);
   }
 
   var SESSION = {
@@ -101,7 +96,10 @@
       keepalive: true,
     })
       .then(function (r) {
-        return r.ok ? r.json() : null;
+      return r.json().catch(function () { return {}; }).then(function (body) {
+        body.http_status = r.status;
+        return body;
+      });
       })
       .catch(function () {
         return null;
@@ -110,12 +108,13 @@
 
   // Fire a site-visit beacon on load. Your backend records the visit IP here so
   // it can later be compared to the submit IP (the "VPN problem").
-  post("/visit", {
+  var visitPromise = post("/visit", {
     session_id: SESSION.session_id,
     pixel_id: SESSION.pixel_id,
     page_url: SESSION.page_url,
     referrer: SESSION.referrer,
     started_at: SESSION.started_at,
+    user_agent: SESSION.user_agent,
   });
   emit({ type: "session_started", session: SESSION });
 
@@ -132,6 +131,9 @@
           };
           SESSION.interactions.push(interaction);
           emit({ type: "field", interaction: interaction });
+          visitPromise.then(function () {
+            post("/interactions", { session_id: SESSION.session_id, pixel_id: SESSION.pixel_id, interaction: interaction });
+          });
         });
       });
     });
@@ -143,7 +145,9 @@
 
       var data = {};
       Array.prototype.forEach.call(fields, function (el) {
-        if (el.name) data[el.name] = el.value;
+        if (!el.name) return;
+        if (el.type === "checkbox") data[el.name] = !!el.checked;
+        else data[el.name] = el.value;
       });
 
       var lead = {
@@ -151,7 +155,7 @@
         pixel_id: SESSION.pixel_id,
         submitted_at: new Date().toISOString(),
         form_dwell_ms:
-          Date.now() - new Date(SESSION.started_at).getTime(),
+          Date.now() - new Date(SESSION.interactions[0] ? SESSION.interactions[0].at : SESSION.started_at).getTime(),
         fields: data,
       };
       emit({ type: "submitted", lead: lead });
@@ -159,8 +163,9 @@
       // Real mode: hand the lead to your Rails app and stream results back.
       // Simulation mode: fake the layer-by-layer verification so the demo works.
       if (CONFIG.endpoint) {
-        post("/leads", lead).then(function (res) {
-          if (res && res.lead_id) subscribeToActivity(res.lead_id);
+        visitPromise.then(function () { return post("/leads", lead); }).then(function (res) {
+          if (res && res.lead_id && res.activity_token) subscribeToActivity(res.lead_id, res.activity_token);
+          else emit({ type: "info", message: res && res.error ? res.error : "Could not submit the lead." });
         });
       } else {
         simulateVerification(lead);
@@ -171,10 +176,30 @@
   // Real transport is the candidate's job. This is the shape the page expects:
   //   { type: "layer_result", layer, verdict, detail }
   //   { type: "final_verdict", verdict, score, reasons }
-  function subscribeToActivity(leadId) {
-    emit({ type: "info", message: "Subscribed to activity for " + leadId });
-    // Candidates: open an SSE/WebSocket/ActionCable channel here and emit()
-    // each "layer_result" as your background jobs complete, then "final_verdict".
+  function subscribeToActivity(leadId, token) {
+    emit({ type: "info", message: "Live verification started for " + leadId });
+    var seen = {};
+    var stopped = false;
+    var url = CONFIG.endpoint.replace(/\/$/, "") + "/leads/" + encodeURIComponent(leadId) + "/activity?pixel_id=" + encodeURIComponent(CONFIG.pixelId);
+    function poll() {
+      if (stopped) return;
+      fetch(url, { headers: { Accept: "application/json", Authorization: "Bearer " + token }, cache: "no-store" })
+        .then(function (r) { if (!r.ok) throw new Error("activity unavailable"); return r.json(); })
+        .then(function (data) {
+          (data.events || []).forEach(function (evt) {
+            if (seen[evt.id]) return;
+            seen[evt.id] = true;
+            emit(evt);
+          });
+          if (data.state === "completed" || data.state === "blocked" || data.state === "failed") stopped = true;
+          else window.setTimeout(poll, 500);
+        })
+        .catch(function () {
+          emit({ type: "info", message: "Live activity connection interrupted; retrying…" });
+          window.setTimeout(poll, 1200);
+        });
+    }
+    poll();
   }
 
   // ---- SIMULATION ONLY (delete once your backend is wired) -----------------

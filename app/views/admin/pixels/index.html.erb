@@ -1,0 +1,17 @@
+<h1>Pixels · <%= @account.name %></h1>
+<section class="panel">
+  <h2>Create a pixel</h2>
+  <%= form_with url: admin_pixels_path, method: :post do |f| %>
+    <% if current_user.super_admin? %><%= hidden_field_tag :account_id, @account.id %><% end %>
+    <label>Name</label><%= f.text_field :name, required: true, placeholder: "Solar quote funnel" %>
+    <label>Allowed hostnames</label><%= f.text_field :allowed_hosts, required: true, placeholder: "quotes.example.com" %>
+    <%= f.submit "Create pixel" %>
+  <% end %>
+</section>
+<section class="panel"><h2>Existing pixels</h2>
+  <% @pixels.each do |pixel| %>
+    <article class="pixel-row"><h3><%= pixel.name %> · <code><%= pixel.public_id %></code></h3><p>Hosts: <%= pixel.allowed_hosts.join(", ") %></p>
+      <pre><code>&lt;script async src="<%= request.base_url %>/super-pixel.js" data-pixel-id="<%= pixel.public_id %>" data-endpoint="<%= request.base_url %>/api/pixel"&gt;&lt;/script&gt;</code></pre>
+    </article>
+  <% end %>
+</section>

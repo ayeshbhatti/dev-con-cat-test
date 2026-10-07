@@ -1,0 +1,8 @@
+<section class="panel narrow">
+  <h1>Sign in</h1>
+  <%= form_with url: "/login", method: :post do |f| %>
+    <label>Email</label><%= f.email_field :email, required: true, autofocus: true %>
+    <label>Password</label><%= f.password_field :password, required: true %>
+    <%= f.submit "Sign in" %>
+  <% end %>
+</section>

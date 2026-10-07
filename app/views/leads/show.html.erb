@@ -1,0 +1,125 @@
+<p><%= link_to "Back to dashboard", root_path %></p>
+<h1>Lead <%= @lead.external_id %></h1>
+<p><%= @lead.account.name %> · Received <%= @lead.created_at.utc.iso8601 %></p>
+
+<section class="panel">
+  <h2>Lead summary</h2>
+  <p>
+    <strong>Contact:</strong>
+    <%= @lead.fields["first_name"] %> <%= @lead.fields["last_name"] %><br>
+    <%= @lead.fields["email"] %> · <%= @lead.fields["phone"] %>
+  </p>
+  <p><strong>Page:</strong> <code><%= @lead.landing_page_url %></code></p>
+  <p><strong>Pixel:</strong> <code><%= @lead.pixel.public_id %></code></p>
+
+  <% if @run %>
+    <p>
+      <strong>State:</strong> <%= @run.state %> ·
+      <strong>Verdict:</strong>
+      <span class="pill <%= (@run.verdict || "queued").downcase %>">
+        <%= @run.verdict || "PENDING" %>
+      </span>
+    </p>
+    <p>
+      <strong>Risk points:</strong> <%= @run.score || "Pending" %> ·
+      <strong>Reserved credits:</strong> <%= @run.reserved_credits %>
+    </p>
+    <ul>
+      <% Array(@run.reasons).each do |reason| %>
+        <li><%= reason %></li>
+      <% end %>
+    </ul>
+  <% else %>
+    <p>No verification run exists yet.</p>
+  <% end %>
+</section>
+
+<section class="panel" id="layer-results">
+  <h2>Layer results</h2>
+  <% if @layers.empty? %>
+    <p>No layer results have been recorded.</p>
+  <% end %>
+  <% @layers.each do |layer| %>
+    <details class="lead-detail">
+      <summary>
+        <strong><%= layer.layer.humanize %></strong> ·
+        <%= layer.state %> · <%= layer.verdict.to_s.upcase %>
+      </summary>
+      <pre class="evidence"><%= JSON.pretty_generate(layer.detail) %></pre>
+    </details>
+  <% end %>
+</section>
+
+<section class="panel" id="consent-certificate">
+  <h2>Consent certificate</h2>
+  <% if @certificate %>
+    <p><strong>ID:</strong> <code><%= @certificate.certificate_id %></code></p>
+    <p><strong>SHA-256:</strong> <code><%= @certificate.sha256 %></code></p>
+    <p>
+      <strong>Evidence integrity:</strong>
+      <%= @certificate.valid_evidence? ? "Valid" : "Digest mismatch" %>
+    </p>
+    <p>
+      <%= link_to "Verify certificate",
+            "/certificates/#{@certificate.certificate_id}/verify",
+            target: "_blank", rel: "noopener" %>
+    </p>
+    <details>
+      <summary>View stored certificate evidence</summary>
+      <pre class="evidence"><%= JSON.pretty_generate(@certificate.evidence) %></pre>
+    </details>
+  <% else %>
+    <p>No certificate has been issued for this run.</p>
+  <% end %>
+</section>
+
+<section class="panel" id="pixel-activity">
+  <h2>Pixel activity</h2>
+  <% if @capture %>
+    <p>
+      <strong>Visit started:</strong>
+      <%= (@capture.started_at || @capture.created_at).utc.iso8601 %>
+    </p>
+    <p><strong>Session:</strong> <code><%= @capture.session_id %></code></p>
+    <% if @interactions.empty? %>
+      <p>No field interactions were recorded.</p>
+    <% else %>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Browser timestamp</th><th>Field</th><th>Action</th></tr></thead>
+          <tbody>
+            <% @interactions.each do |event| %>
+              <tr>
+                <td><%= event["at"] %></td>
+                <td><%= event["name"] %></td>
+                <td><%= event["action"] %></td>
+              </tr>
+            <% end %>
+          </tbody>
+        </table>
+      </div>
+    <% end %>
+  <% else %>
+    <p>No browser capture session is attached to this lead.</p>
+  <% end %>
+</section>
+
+<section class="panel" id="activity-timeline">
+  <h2>Verification activity timeline</h2>
+  <p>Latest 200 events, displayed in chronological order. Server times are UTC.</p>
+  <% if @events.empty? %>
+    <p>No verification activity has been recorded.</p>
+  <% end %>
+  <% @events.each do |event| %>
+    <details class="lead-detail">
+      <summary>
+        <time><%= event.created_at.utc.iso8601(3) %></time> ·
+        <strong><%= event.event_type.humanize %></strong>
+        <% if event.event_type == "layer_result" && event.payload["layer"].present? %>
+          · <%= event.payload["layer"].humanize %>
+        <% end %>
+      </summary>
+      <pre class="evidence"><%= JSON.pretty_generate(event.payload) %></pre>
+    </details>
+  <% end %>
+</section>

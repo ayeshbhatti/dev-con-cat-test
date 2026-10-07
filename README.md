@@ -1,69 +1,76 @@
-# Super Pixel — Take-Home Assignment
+# Super Pixel — Rails take-home
 
-This repository is a **take-home coding assignment** for a mid-to-senior
-full-stack Ruby on Rails engineer. It contains the brief, the mock data you'll
-build against, and a demoable landing page + pixel snippet. It does **not**
-contain a solution — building the Rails app is the assignment.
+Rails/PostgreSQL lead capture with tenant login, mock fraud/consent checks, explained verdicts, certificates, credits, a searchable CRM, and a backend-connected polling demo.
 
-> Inspired by the "catching consent" super-pixel concept: one pixel that runs a
-> lead through many fraud/consent detection layers at once and issues a verdict
-> plus a consent certificate.
+## First-time setup
 
-## Start here
-1. Read **[`ASSIGNMENT.md`](ASSIGNMENT.md)** — the full brief and deliverables.
-2. Read **[`docs/DESIGN_QUESTIONS.md`](docs/DESIGN_QUESTIONS.md)** — the
-   judgement calls we care about, before you write code.
-3. Skim **[`docs/provider-modules.md`](docs/provider-modules.md)** and
-   **[`docs/data-contracts.md`](docs/data-contracts.md)** to understand the data.
-4. Open **[`docs/pixel-spec.md`](docs/pixel-spec.md)** for the pixel + real-time
-   requirements.
-5. Grading is transparent — see **[`EVALUATION.md`](EVALUATION.md)**.
+Use Ruby 3.3.1 (Gemfile.lock), Bundler, PostgreSQL, and a role allowed to create databases.
 
-## Try the live demo right now (no backend needed)
-Open `examples/landing-page.html` in a browser, fill in the form, and submit.
-The embedded `super-pixel.js` runs in **simulation mode** and streams fake
-layer-by-layer results into the live activity panel so you can see the target
-experience. Your task is to make that panel reflect **real** results from the
-Rails app you build.
+For Ubuntu/WSL with an existing role matching your Linux username:
 
-```
-examples/
-├── super-pixel.js     # the embeddable snippet (like a TrustedForm tag)
-└── landing-page.html  # a funnel page with a real-time activity panel
-```
+~~~bash
+sudo service postgresql start
+export PGUSER="$(whoami)"
+export PGHOST=/var/run/postgresql
+unset PGPASSWORD
 
-## What's in this repo
-```
-ASSIGNMENT.md          # the brief (read first)
-EVALUATION.md          # how we grade (open on purpose)
-README.md              # this file
-docs/                  # provider specs, data contracts, pixel spec, design Qs
-mock-data/             # leads, accounts, users, CRM, and 8 provider fixtures
-examples/              # pixel snippet + demoable landing page
-```
+bundle install
+bundle exec rails db:create db:migrate
+SEED_PASSWORD='choose-a-local-demo-password' bundle exec rails db:seed
+bundle exec rails server
+~~~
 
-## Timebox
-**3–5 business days.** Please don't exceed it. Depth over breadth — a crisp core
-with a clear `SOLUTION.md` beats a sprawling half-built system.
+Replace the sample password. TCP/password users should instead configure PGHOST, PGUSER and PGPASSWORD for their existing role. Every new terminal needs its connection settings.
 
-## What we're really looking for
-How **you** think. Use AI tools if you like, but the follow-up interview digs
-into your architecture, and the parts that matter — the data model, the
-consensus engine, multi-tenant isolation, credit accounting, and a genuinely
-real-time pixel — are the parts you have to drive yourself. Show us your
-reasoning.
+Seed once when initializing demo data. Reseeding resets fixture account balances and user passwords; it is not ledger reconciliation. Historical seed runs do not debit credits: balances are imported snapshots. Without SEED_PASSWORD, seeding prints a random password shared by demo users.
 
-## Submitting
-Push to a Git repo (this zip is structured to become one — see below) and share
-the link, or send a zip of your finished app. Include your `SOLUTION.md`.
+Existing installations applying the final review patch need no migration or reseed.
 
-### Turning this into a GitHub repo
-```bash
-cd catching-consent-assignment
-git init
-git add .
-git commit -m "Assignment starter kit"
-git branch -M main
-git remote add origin git@github.com:YOUR-ORG/super-pixel-assignment.git
-git push -u origin main
-```
+## Application
+
+| Surface | URL/action |
+| --- | --- |
+| Dashboard | http://localhost:3000/ |
+| Backend demo | http://localhost:3000/demo.html |
+| Pixel management | Manage pixels as account admin/super admin |
+| Lead details | Click a lead ID |
+| Certificate verification | Follow a lead's certificate link |
+
+Users: admin@catchingconsent.example (super admin), dana@solarpro.example (account admin), luis@solarpro.example (member). Use the password chosen/printed at seeding.
+
+Search covers name, email, phone and lead ID. Verdict filters use the latest run. Super admins can filter accounts; members/account admins stay within their account. Results cap at 50 without pagination.
+
+## Demo scenarios
+
+Use localhost rather than opening the HTML as a file. The served page uses pixel px_9f2a01.
+
+To align Maria's imported consent fixture with the local page:
+
+~~~bash
+bundle exec rails runner script/setup_local_demo.rb
+~~~
+
+This development-only helper changes the imported TrustedForm database record for L-1001, leaving the supplied JSON and issued certificates unchanged. It does not disable page matching or override consensus.
+
+Submit Maria Gonzalez, maria.gonzalez@gmail.com, +13105550142 with consent. Maria already exists in the seeded account, so the current detector should show exact duplicate / REJECT. TrustedForm should pass after the helper. Seed/earlier ACCEPT certificates retain their original evidence.
+
+An unused email/phone pair such as new-demo@example.test and +15555550199 produces explicit unavailable provider results and REVIEW. No mocked pass is invented for unmatched input. Missing consent returns consent_required without creating a lead or charging credits.
+
+Refresh before each new demo lead: a capture session may create only one lead.
+
+## Tests and verification
+
+Configure the database in the test terminal, then run:
+
+~~~bash
+bundle exec rails test
+bundle exec rails zeitwerk:check
+~~~
+
+The candidate confirmed the uploaded snapshot at 29 tests, 111 assertions, zero failures/errors. The final review adds 14 tests for API/role boundaries, replay, visit preservation, atomic result/event writes, capture snapshots and public certificate privacy. Final tests must run locally: the review workspace had no Ruby/PostgreSQL runtime.
+
+Real components: Rails routes/sessions, PostgreSQL, jobs, verdict calculation, certificates/digests, credit transactions, search, and polling. Mock components: vendor responses, initial CRM records, plans and burn estimates.
+
+The example retains a simulation fallback without a configured endpoint. The served /demo.html explicitly uses the Rails endpoint. Activity tokens are lead-specific and stored as digests but currently do not expire. The async queue is in-process and not durable.
+
+See SOLUTION.md for policy, design answers and limitations.

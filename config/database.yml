@@ -1,0 +1,20 @@
+default: &default
+  adapter: postgresql
+  encoding: unicode
+  pool: <%= ENV.fetch("RAILS_MAX_THREADS", 5) %>
+  host: <%= ENV.fetch("PGHOST", "localhost") %>
+  username: <%= ENV.fetch("PGUSER", "postgres") %>
+  password: <%= ENV["PGPASSWORD"] %>
+
+development:
+  <<: *default
+  database: super_pixel_development
+
+test:
+  <<: *default
+  database: super_pixel_test
+
+production:
+  <<: *default
+  database: <%= ENV.fetch("DATABASE_NAME", "super_pixel_production") %>
+  url: <%= ENV["DATABASE_URL"] %>
